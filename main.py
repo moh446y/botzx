@@ -114,7 +114,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     import os
 
-    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # ضع التوكن هنا أو في متغير بيئي
+    TOKEN = os.getenv("6927966683:AAHGSfdNmM9aVB_F7qUnQv0KCuq_eGqaklY")  # ضع التوكن هنا أو في متغير بيئي
 
     app = ApplicationBuilder().token(TOKEN).build()
 
