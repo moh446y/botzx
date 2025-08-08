@@ -1,4 +1,5 @@
 gunicorn
+python-telegram-bot
 schedule
 Flask
 psycopg2-binary
