@@ -13,7 +13,7 @@ password_member2 = "Am#@01019028571"
 #=============================
 count_loop = 20
 #=============================
-def time.sleep(seconds, loop=""):
+def countdown(seconds, loop=""):
     for remaining in range(seconds, 0, -1, ):
         sys.stdout.write(f"\r⏳{loop} Waiting : {remaining} s")
         sys.stdout.flush()
