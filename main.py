@@ -3,17 +3,17 @@ import time
 import requests
 from concurrent.futures import ThreadPoolExecutor
 
-owner = "01028068811"
-password_owner = "Am12345@#$"
+owner = "01021024210"
+password_owner = "Am#@01021024210"
 #=============================
-member1 = "01009964081"
+member1 = "01090969508"
 #=============================
-member2 = "01069198219"
-password_member2 = "Mm12345@#$"
+member2 = "01019028571"
+password_member2 = "Am#@01019028571"
 #=============================
-count_loop = 50
+count_loop = 20
 #=============================
-def countdown(seconds, loop=""):
+def time.sleep(seconds, loop=""):
     for remaining in range(seconds, 0, -1, ):
         sys.stdout.write(f"\r⏳{loop} Waiting : {remaining} s")
         sys.stdout.flush()
@@ -320,7 +320,7 @@ for x in range(count_loop):
 	   access_member = login(member2, password_member2)
 	#end block 
 	QuotaRedistribution(access_owner, owner, member1, '10')
-	countdown(5*60)
+	time.sleep(5*60)
 	SendInvitation(access_owner, owner,member2,'40')
 	time.sleep(15)
 	with ThreadPoolExecutor(max_workers=2) as executor:
@@ -329,4 +329,5 @@ for x in range(count_loop):
 	time.sleep(15)
 	CancelInvitation(access_owner, owner, member2)
 	total_felix(access_owner, owner)
-	countdown(5*60 ,loop=f'loop {x + 1} from {count_loop}')
+	time.sleep(5*60)
+	print('='*55)
