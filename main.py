@@ -10,33 +10,24 @@ import json
 BOT_TOKEN = "6927966683:AAHGSfdNmM9aVB_F7qUnQv0KCuq_eGqaklY"
 bot = telebot.TeleBot(BOT_TOKEN)
 
+# قائمة الأدمن (ضع الـ user_id الخاص بك هنا)
+ADMIN_IDS = [5611407285]  # غير هذا الرقم بـ user_id الخاص بك
+
+# قائمة المستخدمين المسموح لهم (يديرها الأدمن)
+ALLOWED_USERS = set(ADMIN_IDS)  # الأدمن مسموح بشكل افتراضي
+
 # متغير لحفظ بيانات المستخدمين
 user_data = {}
 
 sys.excepthook = lambda *args: None
 
-def countdown_message(chat_id, message_id, seconds, loop=""):
-    """عد تنازلي مع تحديث الرسالة"""
-    for remaining in range(seconds, 0, -1):
-        try:
-            countdown_text = f"⏳ {loop} انتظار: {remaining} ثانية"
-            bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=countdown_text
-            )
-            time.sleep(1)
-        except:
-            pass
-    
-    try:
-        bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text="✅ انتهى الانتظار"
-        )
-    except:
-        pass
+def is_admin(user_id):
+    """التحقق من كون المستخدم أدمن"""
+    return user_id in ADMIN_IDS
+
+def is_allowed(user_id):
+    """التحقق من كون المستخدم مسموح له باستخدام البوت"""
+    return user_id in ALLOWED_USERS
 
 def login(number, password):
     headers = {
@@ -335,23 +326,153 @@ def total_felix(access_token, owner):
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
+    user_id = message.from_user.id
+    
+    # التحقق من الصلاحيات
+    if not is_allowed(user_id):
+        bot.send_message(
+            message.chat.id,
+            "❌ عذراً، ليس لديك صلاحية لاستخدام هذا البوت.\n"
+            "تواصل مع المطور للحصول على الصلاحية."
+        )
+        return
+    
+    # إنشاء الأزرار حسب نوع المستخدم
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn1 = types.KeyboardButton("🚀 بدء تشغيل السكريبت")
     btn2 = types.KeyboardButton("⚙️ إعداد البيانات")
     btn3 = types.KeyboardButton("ℹ️ مساعدة")
-    markup.add(btn1, btn2, btn3)
+    
+    if is_admin(user_id):
+        btn_admin = types.KeyboardButton("👑 لوحة الأدمن")
+        markup.add(btn1, btn2)
+        markup.add(btn3, btn_admin)
+    else:
+        markup.add(btn1, btn2, btn3)
+    
+    welcome_msg = "مرحباً بك في بوت Vodafone FlexFamily! 🎉\n\n"
+    welcome_msg += "يمكنك استخدام هذا البوت لتشغيل سكريبت توزيع الفليكسات تلقائياً.\n\n"
+    
+    if is_admin(user_id):
+        welcome_msg += "🔥 مرحباً أدمن! لديك صلاحيات إضافية.\n\n"
+    
+    welcome_msg += "اختر من الأزرار أدناه:"
     
     bot.send_message(
         message.chat.id,
-        "مرحباً بك في بوت Vodafone FlexFamily! 🎉\n\n"
-        "يمكنك استخدام هذا البوت لتشغيل سكريبت توزيع الفليكسات تلقائياً.\n\n"
-        "اختر من الأزرار أدناه:",
+        welcome_msg,
         reply_markup=markup
+    )
+
+@bot.message_handler(func=lambda message: message.text == "👑 لوحة الأدمن")
+def admin_panel(message):
+    user_id = message.from_user.id
+    
+    if not is_admin(user_id):
+        bot.send_message(message.chat.id, "❌ ليس لديك صلاحية أدمن!")
+        return
+    
+    markup = types.InlineKeyboardMarkup()
+    btn1 = types.InlineKeyboardButton("➕ إضافة مستخدم", callback_data="admin_add_user")
+    btn2 = types.InlineKeyboardButton("➖ حذف مستخدم", callback_data="admin_remove_user")
+    btn3 = types.InlineKeyboardButton("📋 عرض المستخدمين", callback_data="admin_list_users")
+    btn4 = types.InlineKeyboardButton("📊 إحصائيات", callback_data="admin_stats")
+    
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+    
+    admin_text = f"""
+👑 **لوحة تحكم الأدمن**
+
+📈 **إحصائيات سريعة:**
+• المستخدمين المسموحين: {len(ALLOWED_USERS)}
+• الأدمن: {len(ADMIN_IDS)}
+
+⚙️ **الإعدادات المتاحة:**
+    """
+    
+    bot.send_message(message.chat.id, admin_text, reply_markup=markup, parse_mode='Markdown')
+
+@bot.callback_query_handler(func=lambda call: call.data == "admin_add_user")
+def admin_add_user(call):
+    user_id = call.from_user.id
+    if not is_admin(user_id):
+        return
+    
+    user_data[user_id] = {'step': 'admin_add_user_id'}
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text="👤 أرسل User ID المراد إضافته:\n\n"
+             "💡 يمكن الحصول على User ID عن طريق @userinfobot"
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data == "admin_remove_user")
+def admin_remove_user(call):
+    user_id = call.from_user.id
+    if not is_admin(user_id):
+        return
+    
+    user_data[user_id] = {'step': 'admin_remove_user_id'}
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text="👤 أرسل User ID المراد حذفه:"
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data == "admin_list_users")
+def admin_list_users(call):
+    user_id = call.from_user.id
+    if not is_admin(user_id):
+        return
+    
+    users_list = "📋 **قائمة المستخدمين المسموحين:**\n\n"
+    
+    for i, user_id_allowed in enumerate(ALLOWED_USERS, 1):
+        status = "👑 (أدمن)" if user_id_allowed in ADMIN_IDS else "👤"
+        users_list += f"{i}. {user_id_allowed} {status}\n"
+    
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=users_list,
+        parse_mode='Markdown'
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data == "admin_stats")
+def admin_stats(call):
+    user_id = call.from_user.id
+    if not is_admin(user_id):
+        return
+    
+    stats_text = f"""
+📊 **إحصائيات مفصلة:**
+
+👥 **المستخدمين:**
+• إجمالي المستخدمين المسموحين: {len(ALLOWED_USERS)}
+• عدد الأدمن: {len(ADMIN_IDS)}
+• المستخدمين العاديين: {len(ALLOWED_USERS) - len(ADMIN_IDS)}
+
+🤖 **البوت:**
+• حالة البوت: 🟢 يعمل
+• البيانات المحفوظة: {len(user_data)} مستخدم
+    """
+    
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=stats_text,
+        parse_mode='Markdown'
     )
 
 @bot.message_handler(func=lambda message: message.text == "⚙️ إعداد البيانات")
 def setup_data(message):
     user_id = message.from_user.id
+    
+    if not is_allowed(user_id):
+        bot.send_message(message.chat.id, "❌ ليس لديك صلاحية لاستخدام هذا البوت!")
+        return
+    
     user_data[user_id] = {'step': 'owner_number'}
     
     bot.send_message(
@@ -361,6 +482,12 @@ def setup_data(message):
 
 @bot.message_handler(func=lambda message: message.text == "ℹ️ مساعدة")
 def help_message(message):
+    user_id = message.from_user.id
+    
+    if not is_allowed(user_id):
+        bot.send_message(message.chat.id, "❌ ليس لديك صلاحية لاستخدام هذا البوت!")
+        return
+    
     help_text = """
 📋 **دليل الاستخدام:**
 
@@ -374,6 +501,8 @@ def help_message(message):
 • عدد الحلقات المطلوبة
 
 ⚠️ **تنبيه:** تأكد من صحة البيانات قبل البدء
+
+⏰ **ملاحظة:** السكريبت سينتظر 5 دقائق بين كل خطوة تلقائياً
     """
     
     bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
@@ -381,6 +510,10 @@ def help_message(message):
 @bot.message_handler(func=lambda message: message.text == "🚀 بدء تشغيل السكريبت")
 def start_script(message):
     user_id = message.from_user.id
+    
+    if not is_allowed(user_id):
+        bot.send_message(message.chat.id, "❌ ليس لديك صلاحية لاستخدام هذا البوت!")
+        return
     
     if user_id not in user_data or 'owner' not in user_data[user_id]:
         bot.send_message(
@@ -399,6 +532,8 @@ def start_script(message):
 👥 **العضو الأول:** {data['member1']}
 👥 **العضو الثاني:** {data['member2']}
 🔄 **عدد الحلقات:** {data['count_loop']}
+
+⏰ **ملاحظة:** سيتم الانتظار 5 دقائق تلقائياً بين كل خطوة
 
 هل تريد بدء التشغيل؟
     """
@@ -437,6 +572,7 @@ def cancel_start_script(call):
     )
 
 def run_script(chat_id, data):
+    status_message = None
     try:
         owner = data['owner']
         password_owner = data['password_owner']
@@ -445,62 +581,127 @@ def run_script(chat_id, data):
         password_member2 = data['password_member2']
         count_loop = data['count_loop']
         
+        # إنشاء رسالة الحالة الأولية
+        initial_status = f"""
+🤖 **حالة تشغيل السكريبت**
+
+📊 **معلومات العملية:**
+👤 المالك: {owner}
+👥 العضو الأول: {member1}  
+👥 العضو الثاني: {member2}
+🔄 إجمالي الحلقات: {count_loop}
+
+⏳ **الحالة الحالية:** جاري تسجيل الدخول...
+        """
+        status_message = bot.send_message(chat_id, initial_status, parse_mode='Markdown')
+        
         # تسجيل الدخول
-        bot.send_message(chat_id, "🔐 جاري تسجيل دخول المالك...")
         access_owner = login(owner, password_owner)
         
         if not access_owner:
-            bot.send_message(chat_id, "❌ فشل في تسجيل دخول المالك")
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=initial_status.replace("جاري تسجيل الدخول...", "❌ فشل في تسجيل دخول المالك"),
+                parse_mode='Markdown'
+            )
             return
             
-        bot.send_message(chat_id, "✅ تم تسجيل دخول المالك بنجاح")
-        
-        bot.send_message(chat_id, "🔐 جاري تسجيل دخول العضو الثاني...")
         access_member = login(member2, password_member2)
         
         if not access_member:
-            bot.send_message(chat_id, "❌ فشل في تسجيل دخول العضو الثاني")
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=initial_status.replace("جاري تسجيل الدخول...", "❌ فشل في تسجيل دخول العضو الثاني"),
+                parse_mode='Markdown'
+            )
             return
-            
-        bot.send_message(chat_id, "✅ تم تسجيل دخول العضو الثاني بنجاح")
         
         # بدء الحلقة الرئيسية
         for x in range(count_loop):
-            loop_msg = bot.send_message(chat_id, f"🔄 بدء الحلقة {x+1} من {count_loop}")
+            current_loop = x + 1
+            
+            # تحديث حالة الحلقة
+            loop_status = f"""
+🤖 **حالة تشغيل السكريبت**
+
+📊 **معلومات العملية:**
+👤 المالك: {owner}
+👥 العضو الأول: {member1}  
+👥 العضو الثاني: {member2}
+🔄 الحلقة الحالية: {current_loop} من {count_loop}
+
+⚡ **تقدم الحلقة الحالية:**
+"""
             
             # إعادة تسجيل الدخول كل حلقتين
             if x % 2 == 0 and x != 0:
-                bot.send_message(chat_id, "🔄 إعادة تسجيل الدخول...")
+                current_status = loop_status + "🔄 إعادة تسجيل الدخول..."
+                bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_message.message_id,
+                    text=current_status,
+                    parse_mode='Markdown'
+                )
                 access_owner = login(owner, password_owner)
                 access_member = login(member2, password_member2)
-                bot.send_message(chat_id, "✅ تم تجديد تسجيل الدخول")
 
-            # توزيع الكوتا الأولى
-            result = QuotaRedistribution(access_owner, owner, member1, '10')
-            bot.send_message(chat_id, result)
+            # الخطوة 1: توزيع الكوتا الأولى
+            current_status = loop_status + "1️⃣ توزيع الكوتا الأولى..."
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=current_status,
+                parse_mode='Markdown'
+            )
             
-            # انتظار 5 دقائق
-            countdown_msg = bot.send_message(chat_id, "⏳ انتظار 5 دقائق...")
-            countdown_message(chat_id, countdown_msg.message_id, 5*60)
+            result1 = QuotaRedistribution(access_owner, owner, member1, '10')
             
-            # إرسال الدعوة
-            result = SendInvitation(access_owner, owner, member2, '40')
-            bot.send_message(chat_id, result)
+            # الخطوة 2: انتظار 5 دقائق
+            current_status = loop_status + f"1️⃣ توزيع الكوتا الأولى ✅\n2️⃣ انتظار 5 دقائق... ⏳"
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=current_status,
+                parse_mode='Markdown'
+            )
+            
+            time.sleep(5*60)  # انتظار 5 دقائق
+            
+            # الخطوة 3: إرسال الدعوة
+            current_status = loop_status + f"1️⃣ توزيع الكوتا الأولى ✅\n2️⃣ انتظار 5 دقائق ✅\n3️⃣ إرسال الدعوة..."
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=current_status,
+                parse_mode='Markdown'
+            )
+            
+            result2 = SendInvitation(access_owner, owner, member2, '40')
             
             time.sleep(15)
             
+            # الخطوة 4: العمليات المتوازية
+            current_status = loop_status + f"1️⃣ توزيع الكوتا الأولى ✅\n2️⃣ انتظار 5 دقائق ✅\n3️⃣ إرسال الدعوة ✅\n4️⃣ تنفيذ العمليات المتوازية..."
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=current_status,
+                parse_mode='Markdown'
+            )
+            
             # تشغيل العمليات المتوازية
             barrier = threading.Barrier(2)
+            results = {}
 
             def fun1():
                 barrier.wait()
-                result = AcceptInvitation(access_member, owner, member2)
-                bot.send_message(chat_id, result)
+                results['accept'] = AcceptInvitation(access_member, owner, member2)
 
             def fun2():
                 barrier.wait()
-                result = QuotaRedistribution(access_owner, owner, member1, '40')
-                bot.send_message(chat_id, result)
+                results['quota'] = QuotaRedistribution(access_owner, owner, member1, '40')
 
             t1 = threading.Thread(target=fun1)
             t2 = threading.Thread(target=fun2)
@@ -513,34 +714,156 @@ def run_script(chat_id, data):
 
             time.sleep(15)
             
-            # إلغاء الدعوة
-            result = CancelInvitation(access_owner, owner, member2)
-            bot.send_message(chat_id, result)
+            # الخطوة 5: إلغاء الدعوة
+            current_status = loop_status + f"1️⃣ توزيع الكوتا الأولى ✅\n2️⃣ انتظار 5 دقائق ✅\n3️⃣ إرسال الدعوة ✅\n4️⃣ العمليات المتوازية ✅\n5️⃣ إلغاء الدعوة..."
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=current_status,
+                parse_mode='Markdown'
+            )
             
-            # عرض إجمالي الفليكسات
-            result = total_felix(access_owner, owner)
-            bot.send_message(chat_id, result)
+            result3 = CancelInvitation(access_owner, owner, member2)
             
-            # انتظار 5 دقائق بين الحلقات
-            if x < count_loop - 1:  # لا تنتظر بعد آخر حلقة
-                countdown_msg = bot.send_message(chat_id, f"⏳ انتظار بين الحلقات...")
-                countdown_message(chat_id, countdown_msg.message_id, 5*60, f'loop {x + 1} from {count_loop}')
+            # الخطوة 6: عرض الفليكسات
+            current_status = loop_status + f"1️⃣ توزيع الكوتا الأولى ✅\n2️⃣ انتظار 5 دقائق ✅\n3️⃣ إرسال الدعوة ✅\n4️⃣ العمليات المتوازية ✅\n5️⃣ إلغاء الدعوة ✅\n6️⃣ جاري حساب الفليكسات..."
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=current_status,
+                parse_mode='Markdown'
+            )
+            
+            flex_result = total_felix(access_owner, owner)
+            
+            # عرض نتيجة الحلقة المكتملة
+            completed_status = f"""
+🤖 **حالة تشغيل السكريبت**
+
+📊 **معلومات العملية:**
+👤 المالك: {owner}
+👥 العضو الأول: {member1}  
+👥 العضو الثاني: {member2}
+🔄 الحلقة المكتملة: {current_loop} من {count_loop}
+
+✅ **نتيجة الحلقة {current_loop}:**
+• {flex_result}
+
+⚡ **حالة جميع الخطوات:**
+1️⃣ توزيع الكوتا الأولى ✅
+2️⃣ انتظار 5 دقائق ✅  
+3️⃣ إرسال الدعوة ✅
+4️⃣ العمليات المتوازية ✅
+5️⃣ إلغاء الدعوة ✅
+6️⃣ حساب الفليكسات ✅
+"""
+            
+            # إضافة حالة الانتظار إذا لم تكن آخر حلقة
+            if x < count_loop - 1:
+                completed_status += f"\n⏳ انتظار 5 دقائق قبل الحلقة {current_loop + 1}..."
+                bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_message.message_id,
+                    text=completed_status,
+                    parse_mode='Markdown'
+                )
+                time.sleep(5*60)  # انتظار بين الحلقات
+            else:
+                bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_message.message_id,
+                    text=completed_status,
+                    parse_mode='Markdown'
+                )
         
-        bot.send_message(chat_id, f"🎉 تم الانتهاء من جميع الحلقات ({count_loop})!")
+        # رسالة الإتمام النهائية
+        final_status = f"""
+🎉 **تم الانتهاء من جميع الحلقات!**
+
+📊 **ملخص العملية:**
+👤 المالك: {owner}
+👥 العضو الأول: {member1}  
+👥 العضو الثاني: {member2}
+✅ الحلقات المكتملة: {count_loop} حلقة
+
+🏆 **النتيجة النهائية:**
+• {total_felix(access_owner, owner)}
+
+⏰ **وقت الإتمام:** {time.strftime('%Y-%m-%d %H:%M:%S')}
+        """
+        
+        bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=status_message.message_id,
+            text=final_status,
+            parse_mode='Markdown'
+        )
         
     except Exception as e:
-        bot.send_message(chat_id, f"❌ حدث خطأ: {str(e)}")
+        error_status = f"""
+❌ **حدث خطأ في السكريپت!**
+
+🔍 **تفاصيل الخطأ:**
+{str(e)}
+
+📞 **تواصل مع المطور للمساعدة**
+        """
+        
+        if status_message:
+            bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message.message_id,
+                text=error_status,
+                parse_mode='Markdown'
+            )
+        else:
+            bot.send_message(chat_id, error_status, parse_mode='Markdown')
 
 @bot.message_handler(content_types=['text'])
 def handle_setup_steps(message):
     user_id = message.from_user.id
+    
+    if not is_allowed(user_id):
+        bot.send_message(message.chat.id, "❌ ليس لديك صلاحية لاستخدام هذا البوت!")
+        return
     
     if user_id not in user_data:
         return
     
     step = user_data[user_id].get('step')
     
-    if step == 'owner_number':
+    # خطوات الأدمن
+    if step == 'admin_add_user_id':
+        try:
+            new_user_id = int(message.text)
+            ALLOWED_USERS.add(new_user_id)
+            del user_data[user_id]['step']
+            bot.send_message(
+                message.chat.id,
+                f"✅ تم إضافة المستخدم {new_user_id} بنجاح!"
+            )
+        except ValueError:
+            bot.send_message(message.chat.id, "❌ يجب إدخال رقم صحيح للـ User ID")
+            
+    elif step == 'admin_remove_user_id':
+        try:
+            remove_user_id = int(message.text)
+            if remove_user_id in ADMIN_IDS:
+                bot.send_message(message.chat.id, "❌ لا يمكن حذف الأدمن!")
+            elif remove_user_id in ALLOWED_USERS:
+                ALLOWED_USERS.remove(remove_user_id)
+                bot.send_message(
+                    message.chat.id,
+                    f"✅ تم حذف المستخدم {remove_user_id} بنجاح!"
+                )
+            else:
+                bot.send_message(message.chat.id, "❌ هذا المستخدم غير موجود في القائمة!")
+            del user_data[user_id]['step']
+        except ValueError:
+            bot.send_message(message.chat.id, "❌ يجب إدخال رقم صحيح للـ User ID")
+    
+    # خطوات إعداد البيانات العادية
+    elif step == 'owner_number':
         user_data[user_id]['owner'] = message.text
         user_data[user_id]['step'] = 'owner_password'
         bot.send_message(message.chat.id, "🔒 أدخل كلمة مرور المالك:")
@@ -573,11 +896,13 @@ def handle_setup_steps(message):
             
             bot.send_message(
                 message.chat.id,
-                "✅ تم حفظ جميع البيانات بنجاح!\nيمكنك الآن الضغط على 'بدء تشغيل السكريبت'"
+                "✅ تم حفظ جميع البيانات بنجاح!\nيمكنك الآن الضغط على 'بدء تشغيل السكريپت'"
             )
         except ValueError:
             bot.send_message(message.chat.id, "❌ يجب إدخال رقم صحيح لعدد الحلقات")
 
 if __name__ == "__main__":
     print("🤖 Bot is running...")
+    print(f"👑 Admin IDs: {ADMIN_IDS}")
+    print("⚠️  تأكد من تغيير ADMIN_IDS في الكود!")
     bot.polling(none_stop=True)
